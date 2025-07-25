@@ -1,8 +1,13 @@
 # frozen_string_literal: true
 
-require_relative "opal_proxy/version"
+if RUBY_ENGINE == 'opal'
+  require_relative "js/proxy"
+else
+  require "opal"
+  require_relative "opal_proxy/version"
+
+  Opal.append_path File.expand_path('lib', __dir__)
+end
 
 module OpalProxy
-  class Error < StandardError; end
-  # Your code goes here...
 end
