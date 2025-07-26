@@ -1,38 +1,98 @@
 # OpalProxy
 
-TODO: Delete this and the text below, and describe your gem
-
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/opal_proxy`. To experiment with that code, run `bin/console` for an interactive prompt.
+Opal Proxy provides a dynamic interface to JavaScript objects in Opal,
+allowing seamless property access, method calls, and Promise handling using idiomatic Ruby syntax.
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+Add this line to your Gemfile:
 
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem 'opal_proxy'
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Execute:
 
 ```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+bundle install
 ```
 
-## Usage
 
-TODO: Write usage instructions here
+## Document example
 
-## Development
+```ruby
+require "js/proxy"
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake test` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+class Document < JSProxy
+  def initialize
+    super($$.document)
+  end
+end
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+document = Document.new
+headers = document.querySelectorAll("h1") # or query_selector_all
+headers.each do |h1|
+  h1.text_content = "Opal is great!" # or textContent
+end
+
+document.body.style.background_color = "lightblue"
+document.body.style.font_family = "Arial, sans-serif"
+document.body.style.color = "darkblue"
+```
+
+## Window example
+
+```ruby
+require "js/proxy"
+
+class Window < JSProxy
+  def initialize
+    super($$.window)
+  end
+end
+
+window = Window.new
+window.alert "Hello world!"
+window.set_timeout(-> {
+  puts "1. Timeout test OK (1s delay)"
+}, 1000)
+window.fetch("https://jsonplaceholder.typicode.com/todos/1")
+  .then do |response|
+    response.json().then do |data|
+      puts "5. Fetched: #{data["title"]}"
+      document.get_element_by_id("output").inner_html += "<p>5. Fetched: #{data["title"]}</p>"
+    end
+  end
+```
+
+## JQuery example
+
+```ruby
+jquery_lib = document.create_element('script')
+jquery_lib.src = "https://code.jquery.com/jquery-3.7.1.min.js"
+document.head.append_child(jquery_lib)
+
+class JQuery < JS::Proxy
+  def initialize(node)
+    super(`$(node)`)
+  end
+end
+
+jquery_lib.onload = -> {
+  document = JQuery.new($$.document)
+  document.ready do
+    paragraph = document.create_element('p')
+    paragraph.id = "my-paragraph"
+    paragraph.text_content = "If you click on me, I will disappear."
+    document.body.append_child(paragraph)
+    JQuery.new("p").click(&:hide)
+  end
+}
+```
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/opal_proxy.
+Bug reports and pull requests are welcome on GitHub at https://github.com/josephschito/opal_proxy.
 
 ## License
 
