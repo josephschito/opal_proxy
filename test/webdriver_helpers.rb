@@ -13,7 +13,7 @@ module WebdriverHelpers
 
   def index_url
     file_path = File.expand_path("fixtures/basic_index.html", __dir__)
-    url = "file://#{file_path}"
+    "file://#{file_path}"
   end
 
   private
@@ -21,7 +21,7 @@ module WebdriverHelpers
   def compile_opal(code)
     lib = Opal::Builder.build('js/proxy').to_s
     compiled_code = Opal::Compiler.new(code, requirable: false).compile
-    full_js = "#{lib}\n#{compiled_code}"
+    "#{lib}\n#{compiled_code}"
   end
 
   def headless_options
