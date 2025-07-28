@@ -27,6 +27,10 @@ module JS
     def method_missing(name, *args, &block)
       js_name = to_js_name(name)
 
+      unless existing_property?(js_name) || js_name.end_with?("=")
+        raise NoMethodError, "undefined method `#{name}` for #{self}"
+      end
+
       if js_name.end_with?("=")
         prop = js_name[0..-2]
         native[prop] = args.first
@@ -96,6 +100,10 @@ module JS
           index.zero? ? part : part.capitalize
         end
       end.join
+    end
+
+    def existing_property?(property)
+      `#{property} in #{to_n}`
     end
   end
 
