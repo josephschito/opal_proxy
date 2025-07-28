@@ -20,7 +20,11 @@ module JS
 
         while (obj !== null) {
           for (const key of Reflect.ownKeys(obj)) {
-            props.add(key.toString());
+            const stringKey = key.toString()
+            const rubyName = #{to_rb_name(`stringKey`)}
+
+            if (typeof key !== 'symbol' && stringKey !== rubyName ) { props.add(rubyName); }
+            props.add(stringKey);
           }
           obj = Object.getPrototypeOf(obj);
         }
@@ -118,6 +122,13 @@ module JS
           index.zero? ? part : part.capitalize
         end
       end.join
+    end
+
+    def to_rb_name(name)
+      name
+        .to_s
+        .gsub(/([A-Z]+)/) { "_#{$1.downcase}" }
+        .sub(/^_/, '')
     end
 
     def existing_property?(property)
