@@ -40,7 +40,6 @@ module JS
             js_callback = %x{
               function() {
                 let args = Array.prototype.slice.call(arguments);
-                let self_instance = #{self};
                 return #{block.call(self.class.new(`this`), *args)};
               }
             }
