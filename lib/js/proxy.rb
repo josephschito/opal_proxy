@@ -12,6 +12,22 @@ module JS
         result
       end
     end
+
+    def native_methods
+      %x{
+        let obj = #{to_n};
+        const props = new Set();
+
+        while (obj !== null) {
+          for (const key of Reflect.ownKeys(obj)) {
+            props.add(key.toString());
+          }
+          obj = Object.getPrototypeOf(obj);
+        }
+
+        return Array.from(props);
+      }
+    end
   end
 
   class Proxy
