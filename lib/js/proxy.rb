@@ -36,6 +36,8 @@ module JS
 
     attr_accessor :native
 
+    IRREGULARS = %w(html url uri)
+
     def initialize(native)
       @native = Native(native)
     end
@@ -110,7 +112,7 @@ module JS
 
     def to_js_name(name)
       name.to_s.split('_').map.with_index do |part, index|
-        if part.gsub("=", "").downcase == "html"
+        if IRREGULARS.include? part.gsub("=", "").downcase
           part.upcase
         else
           index.zero? ? part : part.capitalize
