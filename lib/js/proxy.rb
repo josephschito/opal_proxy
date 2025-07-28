@@ -14,7 +14,7 @@ module JS
     end
 
     def native_methods
-      %x{
+      @native_methods ||= %x{
         let obj = #{to_n};
         const props = new Set();
 
