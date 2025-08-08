@@ -104,6 +104,11 @@ module JS
       wrap_result(val)
     end
 
+    def []=(k, v)
+      native[k] = v
+      wrap_result(native)
+    end
+
     def to_n
       native.to_n
     end
