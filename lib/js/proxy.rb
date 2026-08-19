@@ -1,12 +1,20 @@
+# backtick_javascript: true
+# frozen_string_literal: true
+
 require "opal"
 require "native"
 
 module JS
+  # Shared conversion helpers for values crossing the Ruby/JavaScript boundary.
   module Helpers
     def wrap_result(result)
-      if `result && typeof result.then === 'function'`
+      return nil if `result == null`
+
+      if `typeof result.then === "function" && !result.then.$$owner`
         Promise.new(result)
-      elsif `typeof result === 'object' && result !== null`
+      elsif `result instanceof Number || result instanceof String || result instanceof Boolean`
+        `result.valueOf()`
+      elsif `typeof result === "object"`
         Proxy.new(result)
       else
         result
@@ -14,114 +22,151 @@ module JS
     end
 
     def native_methods
-      @native_methods ||= %x{
-        let obj = #{to_n};
-        const props = new Set();
+      %x{
+        let object = #{to_n};
+        const properties = new Set();
 
-        while (obj !== null) {
-          for (const key of Reflect.ownKeys(obj)) {
-            const stringKey = key.toString()
-            const rubyName = #{to_rb_name(`stringKey`)}
+        while (object !== null) {
+          for (const key of Reflect.ownKeys(object)) {
+            if (typeof key === "symbol") continue;
 
-            if (typeof key !== 'symbol' && stringKey !== rubyName ) { props.add(rubyName); }
-            props.add(stringKey);
+            const nativeName = key.toString();
+            const rubyName = #{to_rb_name(`nativeName`)};
+
+            properties.add(nativeName);
+            properties.add(rubyName);
           }
-          obj = Object.getPrototypeOf(obj);
+          object = Object.getPrototypeOf(object);
         }
 
-        return Array.from(props);
+        return Array.from(properties);
       }
-    end
-  end
-
-  class Proxy
-    include Enumerable
-    include Helpers
-
-    attr_accessor :native
-
-    IRREGULARS = %w(html url uri)
-
-    def initialize(native)
-      @native = Native(native)
-    end
-
-    def method_missing(name, *args, &block)
-      js_name = to_js_name(name)
-
-      unless existing_property?(js_name) || js_name.end_with?("=")
-        raise NoMethodError, "undefined method `#{name}` for #{self}"
-      end
-
-      if js_name.end_with?("=")
-        prop = js_name[0..-2]
-        native[prop] = args.first
-      else
-        val = native[js_name]
-
-        if `typeof val === 'function'`
-          js_args = args.dup
-
-          if block
-            js_callback = %x{
-              function() {
-                let args = Array.prototype.slice.call(arguments);
-                return #{block.call(self.class.new(`this`), *args)};
-              }
-            }
-            js_args << js_callback
-          end
-
-          result = `val.apply(#{to_n}, #{js_args.to_n})`
-          wrap_result(result)
-        elsif `typeof val === 'object' && val !== null`
-          wrap_result(val)
-        else
-          val
-        end
-      end
-    end
-
-    def to_str
-      `#{to_n}.toString()`
-    end
-
-    def respond_to_missing?(name, include_private = false)
-      true
-    end
-
-    def each
-      return enum_for(:each) unless respond_to?(:length)
-
-      length = self.length
-      (0...length).each do |i|
-        yield self[i]
-      end
-    end
-
-    def [](index)
-      val = native[index]
-      wrap_result(val)
-    end
-
-    def []=(k, v)
-      native[k] = v
-      wrap_result(native)
-    end
-
-    def to_n
-      native.to_n
-    end
-
-    def length
-      native.length
     end
 
     private
 
-    def to_js_name(name)
-      name.to_s.split('_').map.with_index do |part, index|
-        if IRREGULARS.include? part.gsub("=", "").downcase
+    def unwrap_result(result)
+      Native.try_convert(result, result)
+    end
+  end
+
+  # Provides Ruby-style access to the properties and methods of a JavaScript object.
+  class Proxy
+    include Enumerable
+    include Helpers
+
+    IRREGULARS = %w[html url uri].freeze
+
+    def initialize(native)
+      self.native = native
+    end
+
+    def native
+      Native(to_n)
+    end
+
+    def native=(value)
+      @native = Native.try_convert(value, value)
+    end
+
+    def method_missing(name, *args, &block)
+      setter = name.end_with?("=")
+      property = resolve_property_name(name, allow_missing: setter)
+
+      return super unless property
+      return write_property(property, args.first) if setter
+
+      read_property(property, args, block)
+    end
+
+    def respond_to_missing?(name, include_private = false)
+      setter = name.end_with?("=")
+      !!resolve_property_name(name, allow_missing: setter) || super
+    end
+
+    def each(&block)
+      return enum_for(:each) unless block
+
+      if iterable?
+        each_iterable(&block)
+      elsif array_like?
+        each_array_like(&block)
+      else
+        raise TypeError, "#{self.class} does not wrap an iterable or array-like object"
+      end
+
+      self
+    end
+
+    def [](index)
+      wrap_result(`#{to_n}[#{index}]`)
+    end
+
+    def []=(key, value)
+      converted = unwrap_result(value)
+      `#{to_n}[#{key}] = #{converted}`
+      value
+    end
+
+    def to_n
+      @native
+    end
+
+    def to_str
+      `String(#{to_n})`
+    end
+
+    def length
+      `#{to_n}.length`
+    end
+
+    private
+
+    def read_property(property, args, block)
+      value = `#{to_n}[#{property}]`
+      return wrap_result(value) unless `typeof value === "function"`
+
+      invoke_native_function(value, args, block)
+    end
+
+    def write_property(property, value)
+      converted = unwrap_result(value)
+      `#{to_n}[#{property}] = #{converted}`
+      value
+    end
+
+    def invoke_native_function(callable, args, block)
+      arguments = args.dup
+      arguments << callback_for(block) if block
+      wrap_result(`callable.apply(#{to_n}, #{arguments.to_n})`)
+    end
+
+    def callback_for(block)
+      %x{
+        return function() {
+          const callbackArgs = Array.prototype.slice.call(arguments).map(function(argument) {
+            return #{wrap_result(`argument`)};
+          });
+          const receiver = #{wrap_result(`this`)};
+          return #{unwrap_result(block.call(`receiver`, *`callbackArgs`))};
+        };
+      }
+    end
+
+    def resolve_property_name(name, allow_missing: false)
+      ruby_name = name.to_s.delete_suffix("=")
+      candidates = js_name_candidates(ruby_name)
+      candidates.find { |candidate| existing_property?(candidate) } ||
+        (candidates.last if allow_missing)
+    end
+
+    def js_name_candidates(name)
+      [name, camelize(name), camelize(name, acronyms: true)].uniq
+    end
+
+    def camelize(name, acronyms: false)
+      name.split("_").map.with_index do |part, index|
+        if acronyms && IRREGULARS.include?(part.downcase)
           part.upcase
         else
           index.zero? ? part : part.capitalize
@@ -132,51 +177,70 @@ module JS
     def to_rb_name(name)
       name
         .to_s
-        .gsub(/([A-Z]+)/) { "_#{$1.downcase}" }
-        .sub(/^_/, '')
+        .gsub(/([A-Z]+)([A-Z][a-z])/, "\\1_\\2")
+        .gsub(/([a-z\d])([A-Z])/, "\\1_\\2")
+        .tr("-", "_")
+        .downcase
     end
 
     def existing_property?(property)
       `#{property} in #{to_n}`
     end
+
+    def iterable?
+      `typeof Symbol !== "undefined" && typeof #{to_n}[Symbol.iterator] === "function"`
+    end
+
+    def array_like?
+      %x{
+        const length = #{to_n}.length;
+        return typeof length === "number" &&
+          Number.isFinite(length) &&
+          length >= 0 &&
+          Math.floor(length) === length;
+      }
+    end
+
+    def each_iterable
+      iterator = `#{to_n}[Symbol.iterator]()`
+
+      loop do
+        step = `iterator.next()`
+        break if `step.done`
+
+        yield wrap_result(`step.value`)
+      end
+    end
+
+    def each_array_like
+      (0...length).each { |index| yield self[index] }
+    end
   end
 
+  # Ruby wrapper for JavaScript promises with chain-preserving return values.
   class Promise < Proxy
-    include Helpers
-
     def then(&block)
-      js_callback = %x{
-        function(value) {
-          var ruby_result = #{block.call(wrap_result(`value`))};
-          if (ruby_result && typeof ruby_result.then === 'function') {
-            return ruby_result;
-          } else if (ruby_result && typeof ruby_result.to_n === 'function') {
-            return ruby_result.to_n();
-          } else {
-            return ruby_result;
-          }
-        }
-      }
-
-      self.native = `#{to_n}.then(#{js_callback})`
+      result = block ? `#{to_n}.then(#{promise_callback(block)})` : `#{to_n}.then()`
+      Promise.new(result)
     end
 
     def catch(&block)
-      js_callback = %x{
-        function(error) {
-          var ruby_result = #{block.call(wrap_result(`error`))};
+      result = block ? `#{to_n}.catch(#{promise_callback(block)})` : `#{to_n}.catch()`
+      Promise.new(result)
+    end
 
-          if (ruby_result && typeof ruby_result.then === 'function') {
-            return ruby_result;
-          } else if (ruby_result && typeof ruby_result.to_n === 'function') {
-            return ruby_result.to_n();
-          } else {
-            return ruby_result;
-          }
-        }
+    private
+
+    def promise_callback(block)
+      %x{
+        const proxy = #{self};
+
+        return function(value) {
+          const wrappedValue = proxy.$wrap_result(value);
+          const rubyResult = block.$call(wrappedValue);
+          return proxy.$unwrap_result(rubyResult);
+        };
       }
-
-      self.native = `#{to_n}.catch(#{js_callback})`
     end
   end
 end

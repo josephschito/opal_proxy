@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module WebdriverHelpers
   def setup
     super
@@ -19,7 +21,7 @@ module WebdriverHelpers
   private
 
   def compile_opal(code)
-    lib = Opal::Builder.build('js/proxy').to_s
+    lib = Opal::Builder.build("js/proxy").to_s
     compiled_code = Opal::Compiler.new(code, requirable: false).compile
     "#{lib}\n#{compiled_code}"
   end
@@ -28,8 +30,7 @@ module WebdriverHelpers
     Selenium::WebDriver::Chrome::Options.new.tap do |opts|
       opts.add_argument("--disable-gpu")
       opts.add_argument("--no-sandbox")
-      return if ENV["NO_HEADLESS"]
-      opts.add_argument("--headless=new")
+      opts.add_argument("--headless=new") unless ENV["NO_HEADLESS"]
     end
   end
 

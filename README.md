@@ -58,13 +58,43 @@ window.set_timeout(-> {
   puts "1. Timeout test OK (1s delay)"
 }, 1000)
 window.fetch("https://jsonplaceholder.typicode.com/todos/1")
-  .then do |response|
-    response.json().then do |data|
-      puts "5. Fetched: #{data["title"]}"
-      document.get_element_by_id("output").inner_html += "<p>5. Fetched: #{data["title"]}</p>"
-    end
+  .then { |response| response.json }
+  .then do |data|
+    puts "5. Fetched: #{data["title"]}"
+    document.get_element_by_id("output").inner_html += "<p>5. Fetched: #{data["title"]}</p>"
   end
+  .catch { |error| warn error["message"] }
 ```
+
+Promise callbacks automatically unwrap returned `JS::Proxy` and `JS::Promise` values,
+so native Promise flattening works across chained `then`, `catch`, and `finally` calls.
+
+## Interop behavior
+
+Property lookup tries the original name first, then camelCase and common JavaScript
+acronyms such as `HTML`, `URL`, and `URI`. For example, both `inner_html` and
+`document_uri` map to their DOM equivalents.
+
+JavaScript properties that collide with Ruby methods can always be accessed with `[]`:
+
+```ruby
+proxy["count"]
+proxy["class"]
+```
+
+When a Ruby block is passed to a JavaScript method, it is appended as the final callback
+argument. The callback receives its JavaScript `this` value first, followed by the native
+callback arguments, all wrapped when necessary:
+
+```ruby
+target.add_event_listener("click") do |receiver, event|
+  event.prevent_default
+  puts receiver
+end
+```
+
+`JS::Proxy` is enumerable for JavaScript iterable and array-like objects, including
+arrays, `Set`, `Map`, `NodeList`, and objects with numeric indexes and a `length`.
 
 ## JQuery example
 
