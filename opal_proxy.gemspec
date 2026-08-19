@@ -9,13 +9,15 @@ Gem::Specification.new do |spec|
   spec.email = ["joseph.schito@gmail.com"]
 
   spec.summary = "Dynamic Ruby-style wrapper for JavaScript objects in Opal."
-  spec.description = "Opal Proxy provides a dynamic interface to JavaScript objects in Opal, allowing seamless property access, method calls, and Promise handling using idiomatic Ruby syntax."
+  spec.description = "Opal Proxy provides a dynamic interface to JavaScript objects in Opal, " \
+                     "with idiomatic property access, method calls, and Promise handling."
   spec.homepage = "https://github.com/josephschito/opal_proxy"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1.0"
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = "https://github.com/josephschito/opal_proxy"
   spec.metadata["changelog_uri"] = "https://github.com/josephschito/opal_proxy/blob/main/CHANGELOG.md"
+  spec.metadata["rubygems_mfa_required"] = "true"
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
